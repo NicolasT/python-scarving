@@ -34,11 +34,8 @@ class SeamCarve:
                 self._resized = None
                 self._costs = None
                 self._maxcost = 1
-
-                self._in_path = []
-                (w, h) = self._original.size
-                for y in range(0, h):
-                        self._in_path.append([False] * w)
+                self._in_path = None
+                self._flip_cost_image = False
 
                 self._init_time = time.mktime(time.localtime())
                 print "(0s) Created SeamCarve object"
@@ -58,20 +55,49 @@ class SeamCarve:
                         for x in range(0, w):
                                 v = int((self._costs[y][x] * 255) / self._maxcost)
                                 rp[x, y] = v
+                if self._flip_cost_image == True:
+                        ret = ret.transpose(Image.FLIP_LEFT_RIGHT)
                 return ret
 
         def resize_width(self, pixels):
                 print "(%ds) Resizing width over %d pixels" % (int(time.mktime(time.localtime()) - self._init_time), pixels)
+
+                self._in_path = []
+                (w, h) = self._original.size
+                for y in range(0, h):
+                        self._in_path.append([False] * w)
+
                 self._find_paths(pixels)
                 self._carve(pixels)
                 print "(%ds) Resizing done" % int(time.mktime(time.localtime()) - self._init_time)
+                self._flip_cost_image = False
 
         def resize_height(self, pixels):
                 copy = self._original
-                self._original = copy.rotate(90, filter = BICUBIC, expand = True)
+                self._original = copy.rotate(90, Image.BICUBIC, True)
                 self.resize_width(pixels)
-                self._resized = self._resized.rotate(-90, filter = BICUBIC, expand = True)
+                self._resized = self._resized.rotate(-90, Image.BICUBIC, True)
+                self._energy = self._energy.rotate(-90, Image.BICUBIC, True)
+                #Because this is used in other functions, we got to transpose the in_path matrix
+                ip = []
+                (w, h) = copy.size
+                for y in range(0, h):
+                        l = []
+                        for x in range(0, w):
+                                l.append(self._in_path[x][y])
+                        ip.append(l)
+                costs = []
+                for y in range(0, h):
+                        l = []
+                        for x in range(0, w):
+                                l.append(self._costs[x][y])
+                        costs.append(l)
+
+                self._in_path = ip
+                self._costs = costs
                 self._original = copy
+
+                self._flip_cost_image = True
 
         def _calculate_energy(self):
                 print "(%ds) Calculating energy" % int(time.mktime(time.localtime()) - self._init_time)
@@ -223,7 +249,7 @@ class SeamCarve:
                 (w, h) = ret.size
                 for y in range(0, h):
                         for x in range(0, w):
-                                if self._in_path[y][x] == True:
+                                if x < len(self._in_path[0]) and y < len(self._in_path) and self._in_path[y][x] == True:
                                         rp[x, y] = (255, 0, 0)
                 return ret
 
@@ -270,11 +296,18 @@ class SeamCarve:
                 return self._resized
 
 def main():
-        pixels = int(sys.argv[1])
-        image = Image.open(sys.argv[2])
+        direction = sys.argv[1]
+        if not direction in ("h", "w"):
+                raise Exception, "First parameter should be h or w"
+
+        pixels = int(sys.argv[2])
+        image = Image.open(sys.argv[3])
 
         c = SeamCarve(image)
-        c.resize_width(pixels)
+        if direction == "h":
+                c.resize_height(pixels)
+        else:
+                c.resize_width(pixels)
         carved = c.get_resized()
         carved.show()
         carved.save("carved.jpg")

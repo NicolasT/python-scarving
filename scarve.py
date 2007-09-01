@@ -34,6 +34,11 @@ class SeamCarve:
                 self._costs = None
                 self._maxcost = 1
 
+                self._in_path = []
+                (w, h) = self._original.size
+                for y in range(0, h):
+                        self._in_path.append([False] * w)
+
         def get_energy_image(self):
                 if self._energy == None:
                         self._calculate_energy()
@@ -57,18 +62,55 @@ class SeamCarve:
                         self._energy = self._calculate_energy()
 
         def _calculate_energy(self):
-                #Sobel matrix coefficients. See http://en.wikipedia.org/wiki/Sobel
-                sx = ( -1, 0, 1,
-                       -2, 0, 2,
-                       -1, 0, 1 )
-                sy = ( 1, 2, 1,
-                       0, 0, 0,
-                       -1, -2, -1 )
 
-                grayscale = ImageOps.grayscale(self._original)
-                x = grayscale.filter(ImageFilter.Kernel((3, 3), sx, scale = 1.0))
-                y = grayscale.filter(ImageFilter.Kernel((3, 3), sy, scale = 1))
-                self._energy = ImageChops.add(x, y)
+#                This *should* work but gives, strange enough, a pretty bad result
+#                g = ImageOps.grayscale(self._original)
+#                x = g.filter(ImageFilter.Kernel((3, 3), (-1, 0, 1, -2, 0, 2, -1, 0, 1), 1))
+#                y = g.filter(ImageFilter.Kernel((3, 3), (1, 2, 1, 0, 0, 0, -1, -2, -1), 1))
+#                r = ImageChops.add(x, y)
+#                r.show()
+#                sys.exit()
+
+                #Sobel matrix coefficients. See http://en.wikipedia.org/wiki/Sobel
+                sx = ( (-1, 0, 1),
+                       (-2, 0, 2),
+                       (-1, 0, 1) )
+                sy = ( (1, 2, 1),
+                       (0, 0, 0),
+                       (-1, -2, -1) )
+
+                (w, h) = self._original.size
+                energy = Image.new("L", (w, h))
+                energy_pixels = energy.load()
+                op = ImageOps.grayscale(self._original).load()
+
+                oox = -2
+                ooy = -2
+
+                for y in range(0, h):
+                        for x in range(0, w):
+                                tx = 0
+                                ty = 0
+
+                                for oy in range(0, 3):
+                                        for ox in range(0, 3):
+                                                hx = x + ox + oox
+                                                hy = y + oy + ooy
+                                                if hx >= 0 and hx < w and hy >= 0 and hy < h:
+                                                        tx = tx + op[hx, hy] * sx[oy][ox]
+                                                        ty = ty + op[hx, hy] * sy[oy][ox]
+
+                                # This should be sqrt(tx^2 + ty^2), but we use an approximisation
+                                total = abs(tx) + abs(ty)
+
+                                # Clamp
+                                if total < 0:
+                                        total = 0
+                                if total > 255:
+                                        total = 255
+                                energy_pixels[x, y] = int(total)
+
+                self._energy = energy
 
         def _calculate_costs(self):
                 (w, h) = self._original.size
@@ -119,20 +161,25 @@ class SeamCarve:
                                 mincost = self._costs[h - 1][x]
 
                 path.append(at)
+                self._in_path[h - 1][at] = True
 
                 for y in range(h - 2, -1, -1):
                         next = at
                         next_cost = self._costs[y][at]
 
                         for cx in range(at - 1, at + 2):
-                                if cx >= 0 and cx <= w:
+                                if cx >= 0 and cx < w:
+                                        print cx
+                                        print w
                                         if self._costs[y][cx] < next_cost:
                                                 next_cost = self._costs[y][cx]
                                                 next = cx
 
                         at = next
+                        self._in_path[y][at] = True
                         path.append(at)
 
+                # If we'd rewrite _carve, this would not be necessary, actually.
                 path.reverse()
                 return path
 
@@ -165,7 +212,10 @@ class SeamCarve:
                                         nx = nx - 1
                                 if x == path[y]:
                                         cl = op[x, y]
-                                        cr = op[x + 1, y]
+                                        if x + 1 < w:
+                                                cr = op[x + 1, y]
+                                        else:
+                                                cr = cl
 
                                         rp[nx, y] = tuple([(cl[i] + cr[i]) / 2 for i in range(0, len(cl))])
                                 else:

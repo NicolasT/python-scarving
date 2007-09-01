@@ -187,17 +187,42 @@ class SeamCarve:
                 self._costs = costs
                 self._maxcost = maxcost
 
-        def _find_path(self, base):
-                #print "Finding path using base %d" % base
+        def _find_path(self, basex, topdown):
+                #If basex is already in a path, search left and right for the closest pixel not in a path
                 (w, h) = self._original.size
-                if self._in_path[h - 1][base] == True:
-                        raise Exception, "This shouldn't happen"
+                if topdown == True:
+                        basey = 0
+                else:
+                        basey = h - 1
+                xinvalid = True
+                if self._in_path[basey][basex] == False:
+                        xinvalid = False
+                xc = 1
+                while xinvalid == True:
+                        currx = basex + xc
+                        if xc > 0:
+                                xc = -1 * xc
+                        else:
+                                xc = (-1 * xc) + 1
 
-                at = base
+                        if currx >= 0 and currx < w and self._in_path[basey][currx] == False:
+                                basex = currx
+                                xinvalid = False
 
-                self._in_path[h - 1][at] = True
+                at = basex
 
-                for y in range(h - 2, -1, -1):
+                self._in_path[basey][at] = True
+
+                if topdown == True:
+                        start = 1
+                        to = h
+                        step = 1
+                else:
+                        start = h - 2
+                        to = -1
+                        step = -1
+
+                for y in range(start, to, step):
                         costs = []
                         tl = at - 1
                         while tl >= 0 and self._in_path[y][tl] == True:
@@ -225,10 +250,18 @@ class SeamCarve:
                 print "(%ds) Finding %d paths" % (int(time.mktime(time.localtime()) - self._init_time), n)
 
                 (w, h) = self._original.size
-                costs = [(self._costs[h - 1][x], x) for x in range(0, len(self._costs[h - 1]))]
-                costs.sort()
+                costs_top = [(self._costs[0][x], x) for x in range(0, len(self._costs[0]))]
+                costs_top.sort()
+                costs_bottom = [(self._costs[h - 1][x], x) for x in range(0, len(self._costs[h - 1]))]
+                costs_bottom.sort()
+                top_last = False
                 for i in range(0, n):
-                        self._find_path(costs[i][1])
+                        if top_last == False:
+                                self._find_path(costs_top[i][1], True)
+                                top_last = True
+                        else:
+                                self._find_path(costs_bottom[i][1], False)
+                                top_last = False
 
         def get_path_image(self):
                 if self._energy == None:

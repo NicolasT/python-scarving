@@ -123,18 +123,15 @@ class SeamCarve:
                 energy_pixels = energy.load()
                 op = ImageOps.grayscale(self._original).load()
 
-                oox = -2
-                ooy = -2
-
                 for y in range(0, h):
                         for x in range(0, w):
                                 tx = 0
                                 ty = 0
 
-                                for oy in range(0, 3):
-                                        for ox in range(0, 3):
-                                                hx = x + ox + oox
-                                                hy = y + oy + ooy
+                                for oy in range(-1, 2):
+                                        for ox in range(-1, 2):
+                                                hx = x + ox
+                                                hy = y + oy
                                                 if hx >= 0 and hx < w and hy >= 0 and hy < h:
                                                         tx = tx + op[hx, hy] * sx[oy][ox]
                                                         ty = ty + op[hx, hy] * sy[oy][ox]
@@ -329,6 +326,9 @@ class SeamCarve:
                 return self._resized
 
 def main():
+        verbose = False
+        if len(sys.argv) == 5:
+                verbose = True
         direction = sys.argv[1]
         if not direction in ("h", "w"):
                 raise Exception, "First parameter should be h or w"
@@ -344,12 +344,13 @@ def main():
         carved = c.get_resized()
         carved.show()
         carved.save("carved.jpg")
-        paths = c.get_paths_image()
-        paths.show()
-        c.get_energy_image().show()
-        c.get_costs_image().show()
-        c.get_paths_energy_image().show()
-        image.show()
+        if verbose:
+                paths = c.get_paths_image()
+                paths.show()
+                c.get_energy_image().show()
+                c.get_costs_image().show()
+                c.get_paths_energy_image().show()
+                image.show()
 
 if __name__ == "__main__":
         main()

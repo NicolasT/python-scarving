@@ -24,6 +24,7 @@
 from PIL import Image, ImageFilter, ImageChops, ImageOps
 import sys
 import math
+import time
 
 class SeamCarve:
         def __init__(self, image):
@@ -39,6 +40,9 @@ class SeamCarve:
                 for y in range(0, h):
                         self._in_path.append([False] * w)
 
+                self._init_time = time.mktime(time.localtime())
+                print "(0s) Created SeamCarve object"
+
         def get_energy_image(self):
                 if self._energy == None:
                         self._calculate_energy()
@@ -47,21 +51,30 @@ class SeamCarve:
         def get_costs_image(self):
                 if self._costs == None:
                         self._calculate_costs()
-                ret = Image.new(self._original.mode, self._original.size)
+                ret = Image.new("L", self._original.size)
                 (w, h) = ret.size
                 rp = ret.load()
                 for y in range(0, h):
                         for x in range(0, w):
                                 v = int((self._costs[y][x] * 255) / self._maxcost)
-                                rp[x, y] = (v, v, v)
+                                rp[x, y] = v
                 return ret
 
-
         def resize_width(self, pixels):
-                if self._energy == None:
-                        self._energy = self._calculate_energy()
+                print "(%ds) Resizing width over %d pixels" % (int(time.mktime(time.localtime()) - self._init_time), pixels)
+                self._find_paths(pixels)
+                self._carve(pixels)
+                print "(%ds) Resizing done" % int(time.mktime(time.localtime()) - self._init_time)
+
+        def resize_height(self, pixels):
+                copy = self._original
+                self._original = copy.rotate(90, filter = BICUBIC, expand = True)
+                self.resize_width(pixels)
+                self._resized = self._resized.rotate(-90, filter = BICUBIC, expand = True)
+                self._original = copy
 
         def _calculate_energy(self):
+                print "(%ds) Calculating energy" % int(time.mktime(time.localtime()) - self._init_time)
 
 #                This *should* work but gives, strange enough, a pretty bad result
 #                g = ImageOps.grayscale(self._original)
@@ -117,6 +130,7 @@ class SeamCarve:
                 inf = float("infinity")
                 if self._energy == None:
                         self._calculate_energy()
+                print "(%ds) Calculating costs" % int(time.mktime(time.localtime()) - self._init_time)
                 energy_data = self._energy.load()
 
                 costs = []
@@ -147,41 +161,48 @@ class SeamCarve:
                 self._costs = costs
                 self._maxcost = maxcost
 
-        def _find_path(self):
-                if self._costs == None:
-                        self._calculate_costs()
-                path = []
-                at = -1
-                mincost = float("infinity")
+        def _find_path(self, base):
+                #print "Finding path using base %d" % base
                 (w, h) = self._original.size
+                if self._in_path[h - 1][base] == True:
+                        raise Exception, "This shouldn't happen"
 
-                for x in range(0, w):
-                        if self._costs[h - 1][x] < mincost:
-                                at = x
-                                mincost = self._costs[h - 1][x]
+                at = base
 
-                path.append(at)
                 self._in_path[h - 1][at] = True
 
                 for y in range(h - 2, -1, -1):
-                        next = at
-                        next_cost = self._costs[y][at]
+                        costs = []
+                        tl = at - 1
+                        while tl >= 0 and self._in_path[y][tl] == True:
+                                tl = tl - 1
+                        if not tl == -1:
+                                costs.append((self._costs[y][tl], tl))
+                        tr = at + 1
+                        while tr < w and self._in_path[y][tr] == True:
+                                tr = tr + 1
+                        if not tr == w:
+                                costs.append((self._costs[y][tr], tr))
 
-                        for cx in range(at - 1, at + 2):
-                                if cx >= 0 and cx < w:
-                                        print cx
-                                        print w
-                                        if self._costs[y][cx] < next_cost:
-                                                next_cost = self._costs[y][cx]
-                                                next = cx
+                        if self._in_path[y][at] == False:
+                                costs.append((self._costs[y][at], at))
 
-                        at = next
+                        costs.sort()
+
+                        at = costs[0][1]
                         self._in_path[y][at] = True
-                        path.append(at)
 
-                # If we'd rewrite _carve, this would not be necessary, actually.
-                path.reverse()
-                return path
+        def _find_paths(self, n):
+                if self._costs == None:
+                        self._calculate_costs()
+
+                print "(%ds) Finding %d paths" % (int(time.mktime(time.localtime()) - self._init_time), n)
+
+                (w, h) = self._original.size
+                costs = [(self._costs[h - 1][x], x) for x in range(0, len(self._costs[h - 1]))]
+                costs.sort()
+                for i in range(0, n):
+                        self._find_path(costs[i][1])
 
         def get_path_image(self):
                 if self._energy == None:
@@ -193,11 +214,40 @@ class SeamCarve:
                         rp[path[y], y] = (255, 0, 0)
                 return ret
 
-        def _carve(self):
-                path = self._find_path()
+        def get_paths_energy_image(self):
+                if self._in_path == None:
+                        raise Exception, "No paths calculated"
+
+                ret = self._energy.convert("RGB")
+                rp = ret.load()
+                (w, h) = ret.size
+                for y in range(0, h):
+                        for x in range(0, w):
+                                if self._in_path[y][x] == True:
+                                        rp[x, y] = (255, 0, 0)
+                return ret
+
+        def get_paths_image(self):
+                if self._in_path == None:
+                        raise Exception, "No paths calculated"
+
+                ret = self._original.copy()
+                rp = ret.load()
+                (w, h) = ret.size
+                for y in range(0, h):
+                        for x in range(0, w):
+                                if self._in_path[y][x] == True:
+                                        rp[x, y] = (255, 0, 0)
+                return ret
+
+        def _carve(self, dp):
+                print "(%ds) Carving" % int(time.mktime(time.localtime()) - self._init_time)
+                if self._in_path == None:
+                        raise Exception, "No paths calculated"
+
                 (w, h) = self._original.size
 
-                nw = w - 1
+                nw = w - dp
                 nh = h
 
                 ret = Image.new(self._original.mode, (nw, nh))
@@ -206,42 +256,34 @@ class SeamCarve:
                 rp = ret.load()
 
                 for y in range(0, h):
-                        for x in range(0, w):
-                                nx = x
-                                if x >= path[y]:
-                                        nx = nx - 1
-                                if x == path[y]:
-                                        cl = op[x, y]
-                                        if x + 1 < w:
-                                                cr = op[x + 1, y]
-                                        else:
-                                                cr = cl
-
-                                        rp[nx, y] = tuple([(cl[i] + cr[i]) / 2 for i in range(0, len(cl))])
-                                else:
-                                        rp[nx, y] = op[x, y]
+                        xiter = -1
+                        for x in range(0, nw):
+                                xiter = xiter + 1
+                                while self._in_path[y][xiter] == True:
+                                        xiter = xiter + 1
+                                #TODO interpolate colors
+                                rp[x, y] = op[xiter, y]
 
                 self._resized = ret
 
-        def get_carved(self):
-                self._carve()
+        def get_resized(self):
                 return self._resized
 
-
-
 def main():
-        times = int(sys.argv[1])
-        print "Loading original image"
+        pixels = int(sys.argv[1])
         image = Image.open(sys.argv[2])
 
-        carved = image
-        for i in range(0, times):
-                print "Run %d" % i
-                c = SeamCarve(carved)
-                carved = c.get_carved()
-
+        c = SeamCarve(image)
+        c.resize_width(pixels)
+        carved = c.get_resized()
         carved.show()
         carved.save("carved.jpg")
+        paths = c.get_paths_image()
+        paths.show()
+        c.get_energy_image().show()
+        c.get_costs_image().show()
+        c.get_paths_energy_image().show()
+        image.show()
 
 if __name__ == "__main__":
         main()

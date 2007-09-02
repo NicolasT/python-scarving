@@ -28,6 +28,7 @@ import time
 import getopt
 import numpy
 from scipy.ndimage.filters import generic_gradient_magnitude, sobel
+import random
 
 class SeamCarve:
         def __init__(self, image):
@@ -76,6 +77,7 @@ class SeamCarve:
                 self._flip_cost_image = False
 
         def resize_height(self, pixels):
+                #TODO This approach turns out to be very wrong. Needs to be rewritten nicely
                 copy = self._original
                 self._original = copy.rotate(90, Image.BICUBIC, True)
                 self.resize_width(pixels)
@@ -208,6 +210,26 @@ class SeamCarve:
                         at = costs[0][1]
                         self._in_path[y][at] = True
 
+        def _get_x_indices_by_cost(self, line):
+                t = {}
+                for x in range(0, len(self._costs[line])):
+                        cost = self._costs[line][x]
+                        if not cost in t.keys():
+                                t[cost] = []
+                        t[cost].append(x)
+                costs = list(t.keys())
+                costs.sort()
+                ret = []
+                for i in range(0, len(costs)):
+                        xs = list(t[costs[i]])
+                        random.shuffle(xs)
+                        ret.extend(xs)
+                return ret
+
+                costs = [(self._costs[line][x], x) for x in range(0, len(self._costs[line]))]
+                costs.sort()
+                return [t[1] for t in costs]
+
         def _find_paths(self, n):
                 if self._costs == None:
                         self._calculate_costs()
@@ -215,17 +237,15 @@ class SeamCarve:
                 print "(%ds) Finding %d paths" % (int(time.mktime(time.localtime()) - self._init_time), n)
 
                 (w, h) = self._original.size
-                costs_top = [(self._costs[0][x], x) for x in range(0, len(self._costs[0]))]
-                costs_top.sort()
-                costs_bottom = [(self._costs[h - 1][x], x) for x in range(0, len(self._costs[h - 1]))]
-                costs_bottom.sort()
+                top_x_indices = self._get_x_indices_by_cost(0)
+                bottom_x_indices = self._get_x_indices_by_cost(h - 1)
                 top_last = False
                 for i in range(0, n):
                         if top_last == False:
-                                self._find_path(costs_top[i][1], True)
+                                self._find_path(top_x_indices[i], True)
                                 top_last = True
                         else:
-                                self._find_path(costs_bottom[i][1], False)
+                                self._find_path(bottom_x_indices[i], False)
                                 top_last = False
 
         def get_path_image(self):

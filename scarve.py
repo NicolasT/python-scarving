@@ -103,7 +103,12 @@ class SeamCarve:
         def _calculate_energy(self):
                 print "(%ds) Calculating energy" % int(time.mktime(time.localtime()) - self._init_time)
 
-#                This *should* work but gives, strange enough, a pretty bad result
+#               Why this doesn't work:
+#               The generated x and y matrices (they shouldn't be images) are clamped to [O, 255]
+#               This is not how Sobel/convolution/magnitude calculation works: we want the actual values
+#               after the convolution was calculated, to be able to calculate the magnitude using
+#               sqrt(x**2 + y**2), or the approximisation we use, |x| + |y|.
+#               This implies we can't do the matrix calculation using PIL. Maybe NumPy is an option...
 #                g = ImageOps.grayscale(self._original)
 #                x = g.filter(ImageFilter.Kernel((3, 3), (-1, 0, 1, -2, 0, 2, -1, 0, 1), 1))
 #                y = g.filter(ImageFilter.Kernel((3, 3), (1, 2, 1, 0, 0, 0, -1, -2, -1), 1))

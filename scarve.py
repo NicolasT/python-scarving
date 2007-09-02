@@ -134,8 +134,8 @@ class SeamCarve:
                                                 hx = x + ox
                                                 hy = y + oy
                                                 if hx >= 0 and hx < w and hy >= 0 and hy < h:
-                                                        tx = tx + op[hx, hy] * sx[oy][ox]
-                                                        ty = ty + op[hx, hy] * sy[oy][ox]
+                                                        tx = tx + op[hx, hy] * sx[oy + 1][ox + 1]
+                                                        ty = ty + op[hx, hy] * sy[oy + 1][ox + 1]
 
                                 # This should be sqrt(tx^2 + ty^2), but we use an approximisation
                                 total = abs(tx) + abs(ty)
@@ -255,34 +255,12 @@ class SeamCarve:
                 costs_bottom = [(self._costs[h - 1][x], x) for x in range(0, len(self._costs[h - 1]))]
                 costs_bottom.sort()
                 top_last = False
-                top_last_left = False
-                bottom_last_left = False
                 for i in range(0, n):
                         if top_last == False:
-                                if top_last_left == False:
-                                        j = i
-                                        if j > w / 2:
-                                                raise Exception, "Can't handle this image"
-                                        top_last_left = True
-                                else:
-                                        j = w - i
-                                        if j < w / 2:
-                                                raise Exception, "Can't handle this image"
-                                        top_last_left = False
-                                self._find_path(costs_top[j][1], True)
+                                self._find_path(costs_top[i][1], True)
                                 top_last = True
                         else:
-                                if bottom_last_left == False:
-                                        j = i
-                                        if j > w / 2:
-                                                raise Exception, "Can't handle this image"
-                                        bottom_last_left = True
-                                else:
-                                        j = w - i
-                                        if j < w / 2:
-                                                raise Exception, "Can't handle this image"
-                                        bottom_last_left = False
-                                self._find_path(costs_bottom[j][1], False)
+                                self._find_path(costs_bottom[i][1], False)
                                 top_last = False
 
         def get_path_image(self):

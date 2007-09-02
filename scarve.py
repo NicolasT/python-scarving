@@ -25,6 +25,7 @@ from PIL import Image, ImageFilter, ImageChops, ImageOps
 import sys
 import math
 import time
+import getopt
 
 class SeamCarve:
         def __init__(self, image):
@@ -205,6 +206,8 @@ class SeamCarve:
                         if currx >= 0 and currx < w and self._in_path[basey][currx] == False:
                                 basex = currx
                                 xinvalid = False
+                        if currx < 0 or currx >= w:
+                                raise Exception, "Can't take it anymore"
 
                 at = basex
 
@@ -252,12 +255,34 @@ class SeamCarve:
                 costs_bottom = [(self._costs[h - 1][x], x) for x in range(0, len(self._costs[h - 1]))]
                 costs_bottom.sort()
                 top_last = False
+                top_last_left = False
+                bottom_last_left = False
                 for i in range(0, n):
                         if top_last == False:
-                                self._find_path(costs_top[i][1], True)
+                                if top_last_left == False:
+                                        j = i
+                                        if j > w / 2:
+                                                raise Exception, "Can't handle this image"
+                                        top_last_left = True
+                                else:
+                                        j = w - i
+                                        if j < w / 2:
+                                                raise Exception, "Can't handle this image"
+                                        top_last_left = False
+                                self._find_path(costs_top[j][1], True)
                                 top_last = True
                         else:
-                                self._find_path(costs_bottom[i][1], False)
+                                if bottom_last_left == False:
+                                        j = i
+                                        if j > w / 2:
+                                                raise Exception, "Can't handle this image"
+                                        bottom_last_left = True
+                                else:
+                                        j = w - i
+                                        if j < w / 2:
+                                                raise Exception, "Can't handle this image"
+                                        bottom_last_left = False
+                                self._find_path(costs_bottom[j][1], False)
                                 top_last = False
 
         def get_path_image(self):
@@ -325,16 +350,52 @@ class SeamCarve:
         def get_resized(self):
                 return self._resized
 
-def main():
-        verbose = False
-        if len(sys.argv) == 5:
-                verbose = True
-        direction = sys.argv[1]
-        if not direction in ("h", "w"):
-                raise Exception, "First parameter should be h or w"
+def usage():
+        print "Options:"
+        print "\t-v: verbose (optional)"
+        print "\t-d: h or w, height or width scaling"
+        print "\t-p: number of pixels to scale (integer)"
+        print "\t-f: filename of input image"
 
-        pixels = int(sys.argv[2])
-        image = Image.open(sys.argv[3])
+def main():
+        opts = "vd:p:f:"
+        args = sys.argv
+        if args[0] == "python":
+                args = args[1:]
+        args = args[1:]
+        optlist, args = getopt.getopt(args, opts)
+
+        verbose = False
+        try:
+                i = optlist.index(("-v", ""))
+                verbose = True
+        except:
+                pass
+
+        direction = None
+        pixels = None
+        filename = None
+        for i in optlist:
+                if i[0] == "-d":
+                        direction = i[1]
+                if i[0] == "-p":
+                        pixels = int(i[1])
+                if i[0] == "-f":
+                        filename = i[1]
+
+        if direction == None:
+                usage()
+                raise Exception, "No direction given"
+
+        if pixels == None:
+                usage()
+                raise Exception, "No pixels given"
+
+        if filename == None:
+                usage()
+                raise Exception, "No filename given"
+
+        image = Image.open(filename)
 
         c = SeamCarve(image)
         if direction == "h":

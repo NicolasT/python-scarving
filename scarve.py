@@ -26,6 +26,8 @@ import sys
 import math
 import time
 import getopt
+import numpy
+from scipy.ndimage.filters import generic_gradient_magnitude, sobel
 
 class SeamCarve:
         def __init__(self, image):
@@ -103,56 +105,14 @@ class SeamCarve:
         def _calculate_energy(self):
                 print "(%ds) Calculating energy" % int(time.mktime(time.localtime()) - self._init_time)
 
-#               Why this doesn't work:
-#               The generated x and y matrices (they shouldn't be images) are clamped to [O, 255]
-#               This is not how Sobel/convolution/magnitude calculation works: we want the actual values
-#               after the convolution was calculated, to be able to calculate the magnitude using
-#               sqrt(x**2 + y**2), or the approximisation we use, |x| + |y|.
-#               This implies we can't do the matrix calculation using PIL. Maybe NumPy is an option...
-#                g = ImageOps.grayscale(self._original)
-#                x = g.filter(ImageFilter.Kernel((3, 3), (-1, 0, 1, -2, 0, 2, -1, 0, 1), 1))
-#                y = g.filter(ImageFilter.Kernel((3, 3), (1, 2, 1, 0, 0, 0, -1, -2, -1), 1))
-#                r = ImageChops.add(x, y)
-#                r.show()
-#                sys.exit()
-
-                #Sobel matrix coefficients. See http://en.wikipedia.org/wiki/Sobel
-                sx = ( (-1, 0, 1),
-                       (-2, 0, 2),
-                       (-1, 0, 1) )
-                sy = ( (1, 2, 1),
-                       (0, 0, 0),
-                       (-1, -2, -1) )
-
                 (w, h) = self._original.size
-                energy = Image.new("L", (w, h))
-                energy_pixels = energy.load()
-                op = ImageOps.grayscale(self._original).load()
+                gs = ImageOps.grayscale(self._original)
+                im = numpy.reshape(gs.getdata(), (h, w))
 
-                for y in range(0, h):
-                        for x in range(0, w):
-                                tx = 0
-                                ty = 0
+                r = generic_gradient_magnitude(im, derivative = sobel)
 
-                                for oy in range(-1, 2):
-                                        for ox in range(-1, 2):
-                                                hx = x + ox
-                                                hy = y + oy
-                                                if hx >= 0 and hx < w and hy >= 0 and hy < h:
-                                                        tx = tx + op[hx, hy] * sx[oy + 1][ox + 1]
-                                                        ty = ty + op[hx, hy] * sy[oy + 1][ox + 1]
-
-                                # This should be sqrt(tx^2 + ty^2), but we use an approximisation
-                                total = abs(tx) + abs(ty)
-
-                                # Clamp
-                                if total < 0:
-                                        total = 0
-                                if total > 255:
-                                        total = 255
-                                energy_pixels[x, y] = int(total)
-
-                self._energy = energy
+                self._energy = Image.new("L", (w, h))
+                self._energy.putdata(list(r.flat))
 
         def _calculate_costs(self):
                 (w, h) = self._original.size

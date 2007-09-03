@@ -21,20 +21,21 @@
 # EOL
 
 from PIL import Image, ImageOps
-import numpy
+from numpy import ndarray, reshape
+import utils
 
 class EnergyCalculator:
         def __init__(self, image):
                 self._energy = None
                 
-                if isinstance(image, numpy.ndarray):
-                        self._image = image.copy()
+                if isinstance(image, ndarray):
+                        self._image = image
                         return
 
                 # Assume this is a PIL Image
                 # TODO: How to recognize this?
                 (w, h) = image.size
-                self._image = numpy.reshape(ImageOps.grayscale(image).getdata(), (h, w))
+                self._image = reshape(ImageOps.grayscale(image).getdata(), (h, w))
 
         def calculate_per_pixel(self):
                 raise NotImplemented
@@ -52,8 +53,9 @@ class EnergyCalculator:
         def calculate(self):
                 if self.calculate_per_pixel() == False:
                         e = self._calculate_full_energy()
-                        if not isinstance(e, numpy.ndarray):
+                        if not isinstance(e, ndarray):
                                 raise Exception, "Return value of _calculate_full_energy should be of type numpy.ndarray"
+                        e.clip(utils.MIN_PIXEL_VALUE, utils.MAX_PIXEL_VALUE)
                         self._energy = e
                 else:
                         h = len(self._image)
@@ -65,7 +67,7 @@ class EnergyCalculator:
                                         e = self._calculate_pixel_energy(x, y)
                                         if not isinstance(e, int):
                                                 raise Exception, "Return value of _calculate_pixel_energy should be of type int"
-                                        e = clamp(e)
+                                        e = utils.clip(e)
                                         self._energy[y, x] = e
 
         def get_image_matrix(self):
@@ -79,6 +81,11 @@ class EnergyCalculator:
                         self.calculate()
                 return self._energy.copy()
 
+        def get_energy_matrix_shape(self):
+                if self._energy == None:
+                        self.calculate()
+                return self._energy.shape
+
         def get_energy(self, x, y):
                 if self._energy == None:
                         self.calculate()
@@ -87,10 +94,7 @@ class EnergyCalculator:
         def get_energy_image(self):
                 if self._energy == None:
                         self.calculate()
-                h = len(self._energy)
-                if h < 1:
-                        raise Exception, "Energy matrix too small"
-                w = len(self._energy[0])
+                (h, w) = self._energy.shape
                 im = Image.new("L", (w, h))
-                im.putdata(list(self._energy.flat))
+                im.putdata(self._energy.flatten())
                 return im

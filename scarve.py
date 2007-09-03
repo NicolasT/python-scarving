@@ -26,15 +26,13 @@ import sys
 import math
 import time
 import getopt
-import numpy
-from scipy.ndimage.filters import generic_gradient_magnitude, sobel
 import random
 
 class SeamCarve:
-        def __init__(self, image):
+        def __init__(self, image, energy_calculator):
                 self._original = image
                 self._carves = image.copy()
-                self._energy = None
+                self._energy = energy_calculator(image)
                 self._resized = None
                 self._costs = None
                 self._maxcost = 1
@@ -45,9 +43,7 @@ class SeamCarve:
                 print "(0s) Created SeamCarve object"
 
         def get_energy_image(self):
-                if self._energy == None:
-                        self._calculate_energy()
-                return self._energy
+                return self._energy.get_energy_image()
 
         def get_costs_image(self):
                 if self._costs == None:
@@ -76,53 +72,10 @@ class SeamCarve:
                 print "(%ds) Resizing done" % int(time.mktime(time.localtime()) - self._init_time)
                 self._flip_cost_image = False
 
-        def resize_height(self, pixels):
-                #TODO This approach turns out to be very wrong. Needs to be rewritten nicely
-                copy = self._original
-                self._original = copy.rotate(90, Image.BICUBIC, True)
-                self.resize_width(pixels)
-                self._resized = self._resized.rotate(-90, Image.BICUBIC, True)
-                self._energy = self._energy.rotate(-90, Image.BICUBIC, True)
-                #Because this is used in other functions, we got to transpose the in_path matrix
-                ip = []
-                (w, h) = copy.size
-                for y in range(0, h):
-                        l = []
-                        for x in range(0, w):
-                                l.append(self._in_path[x][y])
-                        ip.append(l)
-                costs = []
-                for y in range(0, h):
-                        l = []
-                        for x in range(0, w):
-                                l.append(self._costs[x][y])
-                        costs.append(l)
-
-                self._in_path = ip
-                self._costs = costs
-                self._original = copy
-
-                self._flip_cost_image = True
-
-        def _calculate_energy(self):
-                print "(%ds) Calculating energy" % int(time.mktime(time.localtime()) - self._init_time)
-
-                (w, h) = self._original.size
-                gs = ImageOps.grayscale(self._original)
-                im = numpy.reshape(gs.getdata(), (h, w))
-
-                r = generic_gradient_magnitude(im, derivative = sobel)
-
-                self._energy = Image.new("L", (w, h))
-                self._energy.putdata(list(r.flat))
-
         def _calculate_costs(self):
                 (w, h) = self._original.size
                 inf = float("infinity")
-                if self._energy == None:
-                        self._calculate_energy()
                 print "(%ds) Calculating costs" % int(time.mktime(time.localtime()) - self._init_time)
-                energy_data = self._energy.load()
 
                 costs = []
                 line = [inf for i in range(0, w)]
@@ -144,7 +97,7 @@ class SeamCarve:
                                                 if costs[y - 1][tx] < bestcost:
                                                         bestx = tx
                                                         bestcost = costs[y - 1][tx]
-                                costs[y][x] = costs[y - 1][bestx] + energy_data[x, y]
+                                costs[y][x] = costs[y - 1][bestx] + self._energy.get_energy(x, y)
 
                                 if costs[y][x] > maxcost:
                                         maxcost = costs[y][x]
@@ -248,29 +201,6 @@ class SeamCarve:
                                 self._find_path(bottom_x_indices[i], False)
                                 top_last = False
 
-        def get_path_image(self):
-                if self._energy == None:
-                        self._calculate_energy()
-                ret = self._energy.convert("RGB")
-                rp = ret.load()
-                path = self._find_path()
-                for y in range(0, ret.size[1]):
-                        rp[path[y], y] = (255, 0, 0)
-                return ret
-
-        def get_paths_energy_image(self):
-                if self._in_path == None:
-                        raise Exception, "No paths calculated"
-
-                ret = self._energy.convert("RGB")
-                rp = ret.load()
-                (w, h) = ret.size
-                for y in range(0, h):
-                        for x in range(0, w):
-                                if x < len(self._in_path[0]) and y < len(self._in_path) and self._in_path[y][x] == True:
-                                        rp[x, y] = (255, 0, 0)
-                return ret
-
         def get_paths_image(self):
                 if self._in_path == None:
                         raise Exception, "No paths calculated"
@@ -321,6 +251,7 @@ def usage():
         print "\t-f: filename of input image"
 
 def main():
+        from sobel_energy_calculator import SobelEnergyCalculator
         opts = "vd:p:f:"
         args = sys.argv
         if args[0] == "python":
@@ -360,7 +291,7 @@ def main():
 
         image = Image.open(filename)
 
-        c = SeamCarve(image)
+        c = SeamCarve(image, SobelEnergyCalculator)
         if direction == "h":
                 c.resize_height(pixels)
         else:
@@ -373,7 +304,6 @@ def main():
                 paths.show()
                 c.get_energy_image().show()
                 c.get_costs_image().show()
-                c.get_paths_energy_image().show()
                 image.show()
 
 if __name__ == "__main__":

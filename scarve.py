@@ -23,45 +23,22 @@
 
 from PIL import Image, ImageFilter, ImageChops, ImageOps
 import sys
-import math
-import time
 import getopt
 import random
 
 class SeamCarve:
         def __init__(self, image, energy_calculator):
                 self._original = image
-                self._carves = image.copy()
                 self._energy = energy_calculator(image)
                 self._resized = None
                 self._costs = None
                 self._maxcost = 1
                 self._in_path = None
-                self._flip_cost_image = False
-
-                self._init_time = time.mktime(time.localtime())
-                print "(0s) Created SeamCarve object"
 
         def get_energy_image(self):
                 return self._energy.get_energy_image()
 
-        def get_costs_image(self):
-                if self._costs == None:
-                        self._calculate_costs()
-                ret = Image.new("L", self._original.size)
-                (w, h) = ret.size
-                rp = ret.load()
-                for y in range(0, h):
-                        for x in range(0, w):
-                                v = int((self._costs[y][x] * 255) / self._maxcost)
-                                rp[x, y] = v
-                if self._flip_cost_image == True:
-                        ret = ret.transpose(Image.FLIP_LEFT_RIGHT)
-                return ret
-
         def resize_width(self, pixels):
-                print "(%ds) Resizing width over %d pixels" % (int(time.mktime(time.localtime()) - self._init_time), pixels)
-
                 self._in_path = []
                 (w, h) = self._original.size
                 for y in range(0, h):
@@ -69,13 +46,10 @@ class SeamCarve:
 
                 self._find_paths(pixels)
                 self._carve(pixels)
-                print "(%ds) Resizing done" % int(time.mktime(time.localtime()) - self._init_time)
-                self._flip_cost_image = False
 
         def _calculate_costs(self):
                 (w, h) = self._original.size
                 inf = float("infinity")
-                print "(%ds) Calculating costs" % int(time.mktime(time.localtime()) - self._init_time)
 
                 costs = []
                 line = [inf for i in range(0, w)]
@@ -187,8 +161,6 @@ class SeamCarve:
                 if self._costs == None:
                         self._calculate_costs()
 
-                print "(%ds) Finding %d paths" % (int(time.mktime(time.localtime()) - self._init_time), n)
-
                 (w, h) = self._original.size
                 top_x_indices = self._get_x_indices_by_cost(0)
                 bottom_x_indices = self._get_x_indices_by_cost(h - 1)
@@ -215,7 +187,6 @@ class SeamCarve:
                 return ret
 
         def _carve(self, dp):
-                print "(%ds) Carving" % int(time.mktime(time.localtime()) - self._init_time)
                 if self._in_path == None:
                         raise Exception, "No paths calculated"
 
@@ -246,13 +217,14 @@ class SeamCarve:
 def usage():
         print "Options:"
         print "\t-v: verbose (optional)"
+        print "\t-p: run using profiler (optional)"
         print "\t-d: h or w, height or width scaling"
-        print "\t-p: number of pixels to scale (integer)"
-        print "\t-f: filename of input image"
+        print "\t-n: number of pixels to scale (integer)"
+        print "\tlast argument: filename of input image"
 
 def main():
         from sobel_energy_calculator import SobelEnergyCalculator
-        opts = "vd:p:f:"
+        opts = "pvd:n:f:"
         args = sys.argv
         if args[0] == "python":
                 args = args[1:]
@@ -268,14 +240,12 @@ def main():
 
         direction = None
         pixels = None
-        filename = None
+        filename = args[-1]
         for i in optlist:
                 if i[0] == "-d":
                         direction = i[1]
-                if i[0] == "-p":
+                if i[0] == "-n":
                         pixels = int(i[1])
-                if i[0] == "-f":
-                        filename = i[1]
 
         if direction == None:
                 usage()
@@ -303,8 +273,23 @@ def main():
                 paths = c.get_paths_image()
                 paths.show()
                 c.get_energy_image().show()
-                c.get_costs_image().show()
                 image.show()
 
 if __name__ == "__main__":
-        main()
+        try:
+                i = sys.argv.index("-p")
+        except ValueError:
+                main()
+                sys.exit()
+
+        try:
+                try:
+                        import cProfile as profile
+                except ImportError:
+                        import profile
+        except ImportError:
+                print "Not profiling"
+                main()
+                sys.exit()
+        print "Profiling using %s" % profile.__name__
+        profile.run("main()")
